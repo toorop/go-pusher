@@ -1,9 +1,7 @@
 go-pusher
 =========
 
-A golang pusher client (and perhaps server in the futur...)
-
-See example 
+A golang pusher client & server
 
 ###Warning : Work in progress
 
