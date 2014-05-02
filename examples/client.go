@@ -2,7 +2,7 @@ package main
 
 // Display on console live Trades and Orders book from Bitstamp
 // run with
-// 		go run simple.go
+// 		go run client.go
 
 import (
 	"github.com/toorop/go-pusher"
@@ -14,6 +14,8 @@ const (
 )
 
 func main() {
+
+	log.Println("init...")
 	pusherClient, err := pusher.NewClient(APP_KEY)
 	if err != nil {
 		log.Fatalln(err)
@@ -24,20 +26,51 @@ func main() {
 		log.Println("Subscription error : ", err)
 	}
 
+	log.Println("first subscribe done")
+
 	err = pusherClient.Subscribe("order_book")
 	if err != nil {
 		log.Println("Subscription error : ", err)
 	}
 
-	// test
+	// test subcride to and already subscribed channel
 	err = pusherClient.Subscribe("order_book")
 	if err != nil {
 		log.Println("Subscription error : ", err)
 	}
+
+	err = pusherClient.Subscribe("foo")
+	if err != nil {
+		log.Println("Subscription error : ", err)
+	}
+	log.Println("Subscribed to foo")
+
+	err = pusherClient.Unsubscribe("foo")
+	if err != nil {
+		log.Println("Unsubscription error : ", err)
+	}
+	log.Println("Unsubscibed from foo")
 
 	// Bind events
 	dataChannelTrade, err := pusherClient.Bind("data")
+	if err != nil {
+		log.Println("Bind error: ", err)
+	}
+	log.Println("Binded to 'data' event")
 	tradeChannelTrade, err := pusherClient.Bind("trade")
+	if err != nil {
+		log.Println("Bind error: ", err)
+	}
+	log.Println("Binded to 'trade' event")
+
+	// Test bind/unbind
+	_, err = pusherClient.Bind("foo")
+	if err != nil {
+		log.Println("Bind error: ", err)
+	}
+	pusherClient.Unbind("foo")
+
+	log.Println("init done")
 
 	for {
 		select {
