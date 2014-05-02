@@ -17,44 +17,6 @@ type client struct {
 	binders            map[string]chan *Event
 }
 
-// NewClient initialize & return a Pusher client
-func NewClient(appKey string) (*client, error) {
-	origin := "http://localhost/"
-	url := "wss://ws.pusherapp.com:443/app/" + appKey + "?protocol=" + PROTOCOL_VERSION
-	ws, err := websocket.Dial(url, "", origin)
-	if err != nil {
-		return nil, err
-	}
-	var resp = make([]byte, 11000) // Pusher max message size is 10KB
-	n, err := ws.Read(resp)
-	if err != nil {
-		return nil, err
-	}
-	var event Event
-	err = json.Unmarshal(resp[0:n], &event)
-	if err != nil {
-		return nil, err
-	}
-	switch event.Event {
-	case "pusher:error":
-		var data eventError
-		err = json.Unmarshal([]byte(event.Data), &data)
-		if err != nil {
-			return nil, err
-		}
-		err = errors.New(fmt.Sprintf("Pusher return error : code : %d, message %s", data.code, data.message))
-		return nil, err
-	case "pusher:connection_established":
-		sChannels := new(subscribedChannels)
-		sChannels.channels = make([]string, 0)
-		pClient := client{ws, make(chan *Event, EVENT_CHANNEL_BUFF_SIZE), make(chan bool), sChannels, make(map[string]chan *Event)}
-		go pClient.heartbeat()
-		go pClient.listen()
-		return &pClient, nil
-	}
-	return nil, errors.New("Ooooops something wrong happen")
-}
-
 // heartbeat send a ping frame to server each - TODO reconnect on disconnect
 func (c *client) heartbeat() {
 	for {
@@ -136,4 +98,42 @@ func (c *client) Bind(evt string) (dataChannel chan *Event, err error) {
 // Unbind a event
 func (c *client) Unbind(evt string) {
 	delete(c.binders, evt)
+}
+
+// NewClient initialize & return a Pusher client
+func NewClient(appKey string) (*client, error) {
+	origin := "http://localhost/"
+	url := "wss://ws.pusherapp.com:443/app/" + appKey + "?protocol=" + PROTOCOL_VERSION
+	ws, err := websocket.Dial(url, "", origin)
+	if err != nil {
+		return nil, err
+	}
+	var resp = make([]byte, 11000) // Pusher max message size is 10KB
+	n, err := ws.Read(resp)
+	if err != nil {
+		return nil, err
+	}
+	var event Event
+	err = json.Unmarshal(resp[0:n], &event)
+	if err != nil {
+		return nil, err
+	}
+	switch event.Event {
+	case "pusher:error":
+		var data eventError
+		err = json.Unmarshal([]byte(event.Data), &data)
+		if err != nil {
+			return nil, err
+		}
+		err = errors.New(fmt.Sprintf("Pusher return error : code : %d, message %s", data.code, data.message))
+		return nil, err
+	case "pusher:connection_established":
+		sChannels := new(subscribedChannels)
+		sChannels.channels = make([]string, 0)
+		pClient := client{ws, make(chan *Event, EVENT_CHANNEL_BUFF_SIZE), make(chan bool), sChannels, make(map[string]chan *Event)}
+		go pClient.heartbeat()
+		go pClient.listen()
+		return &pClient, nil
+	}
+	return nil, errors.New("Ooooops something wrong happen")
 }
