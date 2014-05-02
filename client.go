@@ -13,7 +13,7 @@ type client struct {
 	ws                 *websocket.Conn
 	Events             chan *Event
 	Stop               chan bool
-	subscribedChannels []string
+	subscribedChannels *subscribedChannels
 	binders            map[string]chan *Event
 }
 
@@ -45,7 +45,9 @@ func NewClient(appKey string) (*client, error) {
 		err = errors.New(fmt.Sprintf("Pusher return error : code : %d, message %s", data.code, data.message))
 		return nil, err
 	case "pusher:connection_established":
-		pClient := client{ws, make(chan *Event, EVENT_CHANNEL_BUFF_SIZE), make(chan bool), make([]string, 0), make(map[string]chan *Event)}
+		sChannels := new(subscribedChannels)
+		sChannels.channels = make([]string, 0)
+		pClient := client{ws, make(chan *Event, EVENT_CHANNEL_BUFF_SIZE), make(chan bool), sChannels, make(map[string]chan *Event)}
 		go pClient.heartbeat()
 		go pClient.listen()
 		return &pClient, nil
@@ -87,44 +89,51 @@ func (c *client) listen() {
 }
 
 // Subsribe to a channel
-func (c *client) Subscribe(channel2sub string) (err error) {
-	//log.Println("Subscribing to channel " + channel2sub + "...")
+func (c *client) Subscribe(channel string) (err error) {
 	// Already subscribed ?
-	if c.isSubscribedTo(channel2sub) {
-		err = errors.New(fmt.Sprintf("Subscription to %s channel2sub already done.", channel2sub))
+	if c.subscribedChannels.contains(channel) {
+		err = errors.New(fmt.Sprintf("Channel %s already subscribed", channel))
 		return
 	}
-	err = websocket.Message.Send(c.ws, fmt.Sprintf(`{"event":"pusher:subscribe","data":{"channel":"%s"}}`, channel2sub))
+	err = websocket.Message.Send(c.ws, fmt.Sprintf(`{"event":"pusher:subscribe","data":{"channel":"%s"}}`, channel))
 	if err != nil {
 		return
 	}
-	//ch = channel{channel2sub}
-	c.subscribedChannels = append(c.subscribedChannels, channel2sub)
-	//log.Println("Subscribed to channel " + channel2sub)
+	err = c.subscribedChannels.add(channel)
+	return
+}
+
+// Unsubscribe from a channel
+func (c *client) Unsubscribe(channel string) (err error) {
+	// subscribed ?
+	if !c.subscribedChannels.contains(channel) {
+		err = errors.New(fmt.Sprintf("Client isn't subscrived to %s", channel))
+		return
+	}
+	err = websocket.Message.Send(c.ws, fmt.Sprintf(`{"event":"pusher:unsubscribe","data":{"channel":"%s"}}`, channel))
+	if err != nil {
+		return
+	}
+	// Remove channel from subscribedChannels slice
+	c.subscribedChannels.remove(channel)
 	return
 }
 
 // Bind an event
-func (c *client) Bind(ev string) (dataChannel chan *Event, err error) {
-	// Alerady binded
-	_, ok := c.binders[ev]
+func (c *client) Bind(evt string) (dataChannel chan *Event, err error) {
+	// Already binded
+	_, ok := c.binders[evt]
 	if ok {
-		err = errors.New(fmt.Sprintf("Event %s already binded", ev))
+		err = errors.New(fmt.Sprintf("Event %s already binded", evt))
 		return
 	}
 	// New data channel
 	dataChannel = make(chan *Event, EVENT_CHANNEL_BUFF_SIZE)
-	c.binders[ev] = dataChannel
+	c.binders[evt] = dataChannel
 	return
 }
 
-// Helpers
-// isSubscribedTo check if a channel is already subscribed
-func (c *client) isSubscribedTo(channelName string) bool {
-	for _, s := range c.subscribedChannels {
-		if s == channelName {
-			return true
-		}
-	}
-	return false
+// Unbind a event
+func (c *client) Unbind(evt string) {
+	delete(c.binders, evt)
 }
