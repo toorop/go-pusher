@@ -100,10 +100,9 @@ func (c *client) Unbind(evt string) {
 	delete(c.binders, evt)
 }
 
-// NewClient initialize & return a Pusher client
-func NewClient(appKey string) (*client, error) {
+func NewCustomClient(appKey, host, scheme string) (*client, error) {
 	origin := "http://localhost/"
-	url := "wss://ws.pusherapp.com:443/app/" + appKey + "?protocol=" + PROTOCOL_VERSION
+	url := scheme + "://" + host + "/app/" + appKey + "?protocol=" + PROTOCOL_VERSION
 	ws, err := websocket.Dial(url, "", origin)
 	if err != nil {
 		return nil, err
@@ -136,4 +135,9 @@ func NewClient(appKey string) (*client, error) {
 		return &pClient, nil
 	}
 	return nil, errors.New("Ooooops something wrong happen")
+}
+
+// NewClient initialize & return a Pusher client
+func NewClient(appKey string) (*client, error) {
+	return NewCustomClient(appKey, "ws.pusherapp.com:443", "wss")
 }
