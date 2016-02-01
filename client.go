@@ -1,10 +1,10 @@
 package pusher
 
 import (
-	"code.google.com/p/go.net/websocket"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"golang.org/x/net/websocket"
 	"log"
 	"time"
 )
