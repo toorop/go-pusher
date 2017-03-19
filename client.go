@@ -4,9 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"golang.org/x/net/websocket"
 	"log"
 	"time"
+
+	"golang.org/x/net/websocket"
 )
 
 type Client struct {
@@ -22,15 +23,22 @@ func (c *Client) heartbeat() {
 	for {
 		websocket.Message.Send(c.ws, `{"event":"pusher:ping","data":"{}"}`)
 		time.Sleep(HEARTBEAT_RATE * time.Second)
+		if c.Stopped() {
+			return
+		}
 	}
 }
 
 // listen to Pusher server and process/dispatch recieved events
 func (c *Client) listen() {
-	for {
+	for !c.Stopped() {
 		var event Event
 		err := websocket.JSON.Receive(c.ws, &event)
 		if err != nil {
+			if c.Stopped() {
+				// Normal termination (kinda)
+				return
+			}
 			log.Println("Listen error : ", err)
 		} else {
 			//log.Println(event)
@@ -39,7 +47,7 @@ func (c *Client) listen() {
 				websocket.Message.Send(c.ws, `{"event":"pusher:pong","data":"{}"}`)
 			case "pusher:pong":
 			case "pusher:error":
-				log.Println("Event error recieved: ", event.Data)
+				log.Println("Event error received: ", event.Data)
 			default:
 				_, ok := c.binders[event.Event]
 				if ok {
@@ -140,4 +148,19 @@ func NewCustomClient(appKey, host, scheme string) (*Client, error) {
 // NewClient initialize & return a Pusher client
 func NewClient(appKey string) (*Client, error) {
 	return NewCustomClient(appKey, "ws.pusherapp.com:443", "wss")
+}
+
+func (c *Client) Stopped() bool {
+	select {
+	case <-c.Stop:
+		return true
+	default:
+		return false
+	}
+}
+
+// Close the underlying Pusher connection
+func (c *Client) Close() error {
+	close(c.Stop)
+	return c.ws.Close()
 }
