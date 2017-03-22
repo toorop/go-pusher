@@ -20,12 +20,9 @@ type Client struct {
 
 // heartbeat send a ping frame to server each - TODO reconnect on disconnect
 func (c *Client) heartbeat() {
-	for {
+	for !c.Stopped() {
 		websocket.Message.Send(c.ws, `{"event":"pusher:ping","data":"{}"}`)
 		time.Sleep(HEARTBEAT_RATE * time.Second)
-		if c.Stopped() {
-			return
-		}
 	}
 }
 
@@ -36,7 +33,8 @@ func (c *Client) listen() {
 		err := websocket.JSON.Receive(c.ws, &event)
 		if err != nil {
 			if c.Stopped() {
-				// Normal termination (kinda)
+				// Normal termination (ws Receive returns error when ws is
+				// closed by other goroutine)
 				return
 			}
 			log.Println("Listen error : ", err)
@@ -150,6 +148,7 @@ func NewClient(appKey string) (*Client, error) {
 	return NewCustomClient(appKey, "ws.pusherapp.com:443", "wss")
 }
 
+// Stopped checks, in a non-blocking way, if client has been closed.
 func (c *Client) Stopped() bool {
 	select {
 	case <-c.Stop:
@@ -159,8 +158,9 @@ func (c *Client) Stopped() bool {
 	}
 }
 
-// Close the underlying Pusher connection
+// Close the underlying Pusher connection (websocket)
 func (c *Client) Close() error {
+	// Closing the Stop channel "broadcasts" the stop signal.
 	close(c.Stop)
 	return c.ws.Close()
 }
