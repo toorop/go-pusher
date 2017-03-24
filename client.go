@@ -118,20 +118,19 @@ func NewCustomClient(appKey, host, scheme string) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	var event Event
-	err = json.Unmarshal(resp[0:n], &event)
+	var eventStub EventStub
+	err = json.Unmarshal(resp[0:n], &eventStub)
 	if err != nil {
 		return nil, err
 	}
-	switch event.Event {
+	switch eventStub.Event {
 	case "pusher:error":
-		var data eventError
-		err = json.Unmarshal([]byte(event.Data), &data)
+		var ewe EventError
+		err = json.Unmarshal(resp[0:n], &ewe)
 		if err != nil {
 			return nil, err
 		}
-		err = errors.New(fmt.Sprintf("Pusher return error : code : %d, message %s", data.code, data.message))
-		return nil, err
+		return nil, ewe
 	case "pusher:connection_established":
 		sChannels := new(subscribedChannels)
 		sChannels.channels = make([]string, 0)
