@@ -11,6 +11,7 @@ type EventStub struct {
 type Event struct {
 	Event string `json:"event"`
 	Data  string `json:"data"`
+	Channel string `json:"channel"`
 }
 
 // EventError contains a structured error in its Data field.
