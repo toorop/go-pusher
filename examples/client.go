@@ -5,8 +5,9 @@ package main
 // 		go run client.go
 
 import (
-	"github.com/toorop/go-pusher"
+	"go-pusher"
 	"log"
+	"time"
 )
 
 const (
@@ -15,10 +16,11 @@ const (
 
 func main() {
 
+	INIT:
 	log.Println("init...")
 	pusherClient, err := pusher.NewClient(APP_KEY)
 	// if you need to connect to custom endpoint
-	pusherClient, err := pusher.NewCustomClient(APP_KEY, "localhost:8080", "ws")
+	//pusherClient, err := pusher.NewCustomClient(APP_KEY, "localhost:8080", "ws")
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -72,6 +74,13 @@ func main() {
 	}
 	pusherClient.Unbind("foo")
 
+	// Test bind err
+	errChannel, err := pusherClient.Bind(pusher.ErrEvent)
+	if err != nil {
+		log.Println("Bind error: ", err)
+	}
+	log.Println("Binded to 'ErrEvent' event")
+
 	log.Println("init done")
 
 	for {
@@ -80,6 +89,11 @@ func main() {
 			log.Println("ORDER BOOK: " + dataEvt.Data)
 		case tradeEvt := <-tradeChannelTrade:
 			log.Println("TRADE: " + tradeEvt.Data)
+		case errEvt := <-errChannel:
+			log.Println("ErrEvent: " + errEvt.Data)
+			pusherClient.Close()
+			time.Sleep(time.Second)
+			goto INIT
 		}
 	}
 }
