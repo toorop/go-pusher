@@ -10,8 +10,10 @@ import (
 	"golang.org/x/net/websocket"
 )
 
+// ErrEvent error on event
 const ErrEvent = "ErrEvent"
 
+// Client is a pusher client
 type Client struct {
 	ws                 *websocket.Conn
 	Events             chan *Event
@@ -43,8 +45,8 @@ func (c *Client) listen() {
 			_, ok := c.binders[ErrEvent]
 			if ok {
 				c.binders[ErrEvent] <- &Event{
-					Event:ErrEvent,
-					Data:err.Error()}
+					Event: ErrEvent,
+					Data:  err.Error()}
 			}
 			// no matter what error happened, will log again and again
 			// so return
@@ -54,29 +56,29 @@ func (c *Client) listen() {
 			// 3. ...
 			log.Println("Listen error : ", err)
 			return
-		} else {
-			//log.Println(event)
-			switch event.Event {
-			case "pusher:ping":
-				websocket.Message.Send(c.ws, `{"event":"pusher:pong","data":"{}"}`)
-			case "pusher:pong":
-			case "pusher:error":
-				log.Println("Event error received: ", event.Data)
-			default:
-				_, ok := c.binders[event.Event]
-				if ok {
-					c.binders[event.Event] <- &event
-				}
+		}
+
+		switch event.Event {
+		case "pusher:ping":
+			websocket.Message.Send(c.ws, `{"event":"pusher:pong","data":"{}"}`)
+		case "pusher:pong":
+		case "pusher:error":
+			log.Println("Event error received: ", event.Data)
+		default:
+			_, ok := c.binders[event.Event]
+			if ok {
+				c.binders[event.Event] <- &event
 			}
 		}
+
 	}
 }
 
-// Subsribe to a channel
+// Subscribe ..to a channel
 func (c *Client) Subscribe(channel string) (err error) {
 	// Already subscribed ?
 	if c.subscribedChannels.contains(channel) {
-		err = errors.New(fmt.Sprintf("Channel %s already subscribed", channel))
+		err = fmt.Errorf("Channel %s already subscribed", channel)
 		return
 	}
 	err = websocket.Message.Send(c.ws, fmt.Sprintf(`{"event":"pusher:subscribe","data":{"channel":"%s"}}`, channel))
@@ -91,7 +93,7 @@ func (c *Client) Subscribe(channel string) (err error) {
 func (c *Client) Unsubscribe(channel string) (err error) {
 	// subscribed ?
 	if !c.subscribedChannels.contains(channel) {
-		err = errors.New(fmt.Sprintf("Client isn't subscrived to %s", channel))
+		err = fmt.Errorf("Client isn't subscrived to %s", channel)
 		return
 	}
 	err = websocket.Message.Send(c.ws, fmt.Sprintf(`{"event":"pusher:unsubscribe","data":{"channel":"%s"}}`, channel))
@@ -108,7 +110,7 @@ func (c *Client) Bind(evt string) (dataChannel chan *Event, err error) {
 	// Already binded
 	_, ok := c.binders[evt]
 	if ok {
-		err = errors.New(fmt.Sprintf("Event %s already binded", evt))
+		err = fmt.Errorf("Event %s already binded", evt)
 		return
 	}
 	// New data channel
@@ -139,7 +141,7 @@ func (c *Client) Close() error {
 	return c.ws.Close()
 }
 
-
+// NewCustomClient return a custom client
 func NewCustomClient(appKey, host, scheme string) (*Client, error) {
 	ws, err := NewWSS(appKey, host, scheme)
 	if err != nil {
@@ -153,7 +155,8 @@ func NewCustomClient(appKey, host, scheme string) (*Client, error) {
 	return &pClient, nil
 }
 
-func NewWSS(appKey, host, scheme string) (ws *websocket.Conn, err error){
+// NewWSS return a websocket connexion
+func NewWSS(appKey, host, scheme string) (ws *websocket.Conn, err error) {
 	origin := "http://localhost/"
 	url := scheme + "://" + host + "/app/" + appKey + "?protocol=" + PROTOCOL_VERSION
 	ws, err = websocket.Dial(url, "", origin)

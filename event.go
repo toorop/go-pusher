@@ -8,9 +8,10 @@ type EventStub struct {
 	Event string `json:"event"`
 }
 
+// Event is a pusher event
 type Event struct {
-	Event string `json:"event"`
-	Data  string `json:"data"`
+	Event   string `json:"event"`
+	Data    string `json:"data"`
 	Channel string `json:"channel"`
 }
 

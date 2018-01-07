@@ -1,7 +1,6 @@
 package pusher
 
 import (
-	"errors"
 	"fmt"
 	"sync"
 )
@@ -27,7 +26,7 @@ func (s *subscribedChannels) add(channel string) error {
 	s.Lock()
 	defer s.Unlock()
 	if s.contains(channel) {
-		return errors.New(fmt.Sprintf("Channel %s already subscribed", channel))
+		return fmt.Errorf("Channel %s already subscribed", channel)
 	}
 	s.channels = append(s.channels, channel)
 	return nil
