@@ -10,6 +10,8 @@ import (
 	"golang.org/x/net/websocket"
 )
 
+const ErrEvent = "ErrEvent"
+
 type Client struct {
 	ws                 *websocket.Conn
 	Events             chan *Event
@@ -35,9 +37,23 @@ func (c *Client) listen() {
 			if c.Stopped() {
 				// Normal termination (ws Receive returns error when ws is
 				// closed by other goroutine)
+				log.Println("Listen error and c stopped :", err)
 				return
 			}
+			_, ok := c.binders[ErrEvent]
+			if ok {
+				c.binders[ErrEvent] <- &Event{
+					Event:ErrEvent,
+					Data:err.Error()}
+			}
+			// no matter what error happened, will log again and again
+			// so return
+			// err eg:
+			// 1. use of closed network connection
+			// 2. EOF (network error)
+			// 3. ...
 			log.Println("Listen error : ", err)
+			return
 		} else {
 			//log.Println(event)
 			switch event.Event {
@@ -106,10 +122,41 @@ func (c *Client) Unbind(evt string) {
 	delete(c.binders, evt)
 }
 
+// Stopped checks, in a non-blocking way, if client has been closed.
+func (c *Client) Stopped() bool {
+	select {
+	case <-c.Stop:
+		return true
+	default:
+		return false
+	}
+}
+
+// Close the underlying Pusher connection (websocket)
+func (c *Client) Close() error {
+	// Closing the Stop channel "broadcasts" the stop signal.
+	close(c.Stop)
+	return c.ws.Close()
+}
+
+
 func NewCustomClient(appKey, host, scheme string) (*Client, error) {
+	ws, err := NewWSS(appKey, host, scheme)
+	if err != nil {
+		return nil, err
+	}
+	sChannels := new(subscribedChannels)
+	sChannels.channels = make([]string, 0)
+	pClient := Client{ws, make(chan *Event, EVENT_CHANNEL_BUFF_SIZE), make(chan bool), sChannels, make(map[string]chan *Event)}
+	go pClient.heartbeat()
+	go pClient.listen()
+	return &pClient, nil
+}
+
+func NewWSS(appKey, host, scheme string) (ws *websocket.Conn, err error){
 	origin := "http://localhost/"
 	url := scheme + "://" + host + "/app/" + appKey + "?protocol=" + PROTOCOL_VERSION
-	ws, err := websocket.Dial(url, "", origin)
+	ws, err = websocket.Dial(url, "", origin)
 	if err != nil {
 		return nil, err
 	}
@@ -132,12 +179,7 @@ func NewCustomClient(appKey, host, scheme string) (*Client, error) {
 		}
 		return nil, ewe
 	case "pusher:connection_established":
-		sChannels := new(subscribedChannels)
-		sChannels.channels = make([]string, 0)
-		pClient := Client{ws, make(chan *Event, EVENT_CHANNEL_BUFF_SIZE), make(chan bool), sChannels, make(map[string]chan *Event)}
-		go pClient.heartbeat()
-		go pClient.listen()
-		return &pClient, nil
+		return ws, nil
 	}
 	return nil, errors.New("Ooooops something wrong happen")
 }
@@ -145,21 +187,4 @@ func NewCustomClient(appKey, host, scheme string) (*Client, error) {
 // NewClient initialize & return a Pusher client
 func NewClient(appKey string) (*Client, error) {
 	return NewCustomClient(appKey, "ws.pusherapp.com:443", "wss")
-}
-
-// Stopped checks, in a non-blocking way, if client has been closed.
-func (c *Client) Stopped() bool {
-	select {
-	case <-c.Stop:
-		return true
-	default:
-		return false
-	}
-}
-
-// Close the underlying Pusher connection (websocket)
-func (c *Client) Close() error {
-	// Closing the Stop channel "broadcasts" the stop signal.
-	close(c.Stop)
-	return c.ws.Close()
 }
