@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	"golang.org/x/net/websocket"
@@ -20,6 +21,7 @@ type Client struct {
 	Stop               chan bool
 	subscribedChannels *subscribedChannels
 	binders            map[string]chan *Event
+	m                  sync.Mutex
 }
 
 // heartbeat send a ping frame to server each - TODO reconnect on disconnect
@@ -34,12 +36,14 @@ func (c *Client) heartbeat() {
 func (c *Client) listen() {
 	for !c.Stopped() {
 		var event Event
+		c.m.Lock()
 		err := websocket.JSON.Receive(c.ws, &event)
 		if err != nil {
 			if c.Stopped() {
 				// Normal termination (ws Receive returns error when ws is
 				// closed by other goroutine)
 				log.Println("Listen error and c stopped :", err)
+				c.m.Unlock()
 				return
 			}
 			_, ok := c.binders[ErrEvent]
@@ -55,9 +59,10 @@ func (c *Client) listen() {
 			// 2. EOF (network error)
 			// 3. ...
 			log.Println("Listen error : ", err)
+			c.m.Unlock()
 			return
 		}
-
+		c.m.Unlock()
 		switch event.Event {
 		case "pusher:ping":
 			websocket.Message.Send(c.ws, `{"event":"pusher:pong","data":"{}"}`)
@@ -115,7 +120,9 @@ func (c *Client) Bind(evt string) (dataChannel chan *Event, err error) {
 	}
 	// New data channel
 	dataChannel = make(chan *Event, EVENT_CHANNEL_BUFF_SIZE)
+	c.m.Lock()
 	c.binders[evt] = dataChannel
+	c.m.Unlock()
 	return
 }
 
@@ -147,9 +154,10 @@ func NewCustomClient(appKey, host, scheme string) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
+	var m sync.Mutex
 	sChannels := new(subscribedChannels)
 	sChannels.channels = make([]string, 0)
-	pClient := Client{ws, make(chan *Event, EVENT_CHANNEL_BUFF_SIZE), make(chan bool), sChannels, make(map[string]chan *Event)}
+	pClient := Client{ws, make(chan *Event, EVENT_CHANNEL_BUFF_SIZE), make(chan bool), sChannels, make(map[string]chan *Event), m}
 	go pClient.heartbeat()
 	go pClient.listen()
 	return &pClient, nil
