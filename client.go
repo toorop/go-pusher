@@ -42,7 +42,6 @@ func (c *Client) listen() {
 				// Normal termination (ws Receive returns error when ws is
 				// closed by other goroutine)
 				log.Println("Listen error and c stopped :", err)
-				c.m.Unlock()
 				return
 			}
 			c.m.Lock()
