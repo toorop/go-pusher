@@ -19,15 +19,26 @@ type Client struct {
 	ws                 *websocket.Conn
 	Events             chan *Event
 	Stop               chan bool
+	Errors             chan error
 	subscribedChannels *subscribedChannels
 	binders            map[string]chan *Event
 	m                  sync.Mutex
 }
 
+func (c *Client) sendError(err error) {
+	select {
+	case c.Errors <- err:
+	default:
+		log.Println(err)
+	}
+}
+
 // heartbeat send a ping frame to server each - TODO reconnect on disconnect
 func (c *Client) heartbeat() {
 	for !c.Stopped() {
-		websocket.Message.Send(c.ws, `{"event":"pusher:ping","data":"{}"}`)
+		if err := websocket.Message.Send(c.ws, `{"event":"pusher:ping","data":"{}"}`); err != nil {
+			c.sendError(err)
+		}
 		time.Sleep(HEARTBEAT_RATE * time.Second)
 	}
 }
@@ -41,7 +52,7 @@ func (c *Client) listen() {
 			if c.Stopped() {
 				// Normal termination (ws Receive returns error when ws is
 				// closed by other goroutine)
-				log.Println("Listen error and c stopped :", err)
+				c.sendError(fmt.Errorf("Listen error and c stopped : %s", err))
 				return
 			}
 			c.m.Lock()
@@ -58,7 +69,7 @@ func (c *Client) listen() {
 			// 1. use of closed network connection
 			// 2. EOF (network error)
 			// 3. ...
-			log.Println("Listen error : ", err)
+			c.sendError(fmt.Errorf("Listen error : %s", err))
 			return
 		}
 		switch event.Event {
@@ -66,7 +77,7 @@ func (c *Client) listen() {
 			websocket.Message.Send(c.ws, `{"event":"pusher:pong","data":"{}"}`)
 		case "pusher:pong":
 		case "pusher:error":
-			log.Println("Event error received: ", event.Data)
+			c.sendError(fmt.Errorf("Event error received : %s", event.Data))
 		default:
 			c.m.Lock()
 			ch, ok := c.binders[event.Event]
@@ -160,7 +171,13 @@ func NewCustomClient(appKey, host, scheme string) (*Client, error) {
 	}
 	sChannels := new(subscribedChannels)
 	sChannels.channels = make([]string, 0)
-	pClient := Client{ws, make(chan *Event, EVENT_CHANNEL_BUFF_SIZE), make(chan bool), sChannels, make(map[string]chan *Event), sync.Mutex{}}
+	pClient := Client{
+		ws:                 ws,
+		Events:             make(chan *Event, EVENT_CHANNEL_BUFF_SIZE),
+		Stop:               make(chan bool),
+		Errors:             make(chan error),
+		subscribedChannels: sChannels,
+		binders:            make(map[string]chan *Event)}
 	go pClient.heartbeat()
 	go pClient.listen()
 	return &pClient, nil
